@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Moji Redirect</title>
+<script>
+(function() {
+  const params = new URLSearchParams(window.location.search);
+  const word = params.get("q") || "";
+  if (word) {
+    const encoded = encodeURIComponent(word);
+    window.location.href = "https://www.mojidict.com/search?q=" + encoded;
+  } else {
+    document.write("<h2>No search term provided</h2>");
+  }
+})();
+</script>
+</head>
+<body>
+</body>
+</html>

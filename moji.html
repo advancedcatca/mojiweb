@@ -6,23 +6,26 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <script>
 (function () {
-  // 兼容多种参数名：k / kw / keyword / q
-  const p = new URLSearchParams(location.search);
-  let word = (p.get('k') || p.get('kw') || p.get('keyword') || p.get('q') || '').trim();
+  // 1) 先从 query 里取 k/keyword/text/selection
+  const qs = new URLSearchParams(location.search);
+  let word = (qs.get('k') || qs.get('keyword') || qs.get('text') || qs.get('selection') || '').trim();
+
+  // 2) 如果 query 没拿到，再从 hash 里取：#k=xxx 或直接 #xxx
+  if (!word && location.hash) {
+    const hash = location.hash.replace(/^#/, '');
+    // 支持 "#k=…" 或 "#keyword=…" 或直接 "#词"
+    const m = hash.match(/^(?:k|kw|keyword|text|selection)=(.*)$/i);
+    word = decodeURIComponent(m ? m[1] : hash).trim();
+  }
 
   if (!word) {
-    document.body.innerHTML =
-      '<h2>No search term provided</h2><p>Try: <code>?k=猫</code></p>';
+    document.body.innerHTML = '<h2>No search term provided</h2><p>Try: <code>?k=猫</code> or <code>#k=猫</code></p>';
     return;
   }
 
-  // 规范空白
+  // 规范空白并编码
   word = word.replace(/\s+/g, ' ').trim();
-  const encoded = encodeURIComponent(word);
-
-  // 用 searchText 路径式 + 桌面参数，更稳
-  const url = 'https://www.mojidict.com/searchText/' + encoded + '?app=desktop&from=mn4';
-  // 不保留历史，返回时不再重复中转
+  const url = 'https://www.mojidict.com/searchText/' + encodeURIComponent(word) + '?app=desktop&from=mn4';
   location.replace(url);
 })();
 </script>

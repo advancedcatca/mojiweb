@@ -2,30 +2,37 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Moji Redirect for MN4</title>
+<title>Moji Redirect (full sentence)</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <script>
 (function () {
-  // 1) 先从 query 里取 k/keyword/text/selection
+  // 取参数：query 或 hash，兼容多种占位符
   const qs = new URLSearchParams(location.search);
-  let word = (qs.get('k') || qs.get('keyword') || qs.get('text') || qs.get('selection') || '').trim();
-
-  // 2) 如果 query 没拿到，再从 hash 里取：#k=xxx 或直接 #xxx
-  if (!word && location.hash) {
-    const hash = location.hash.replace(/^#/, '');
-    // 支持 "#k=…" 或 "#keyword=…" 或直接 "#词"
+  let raw = (qs.get('k') || qs.get('keyword') || qs.get('text') || qs.get('selection') || '').trim();
+  if (!raw && location.hash) {
+    const hash = decodeURIComponent(location.hash.slice(1));
     const m = hash.match(/^(?:k|kw|keyword|text|selection)=(.*)$/i);
-    word = decodeURIComponent(m ? m[1] : hash).trim();
+    raw = (m ? m[1] : hash).trim();
   }
 
-  if (!word) {
-    document.body.innerHTML = '<h2>No search term provided</h2><p>Try: <code>?k=猫</code> or <code>#k=猫</code></p>';
+  const debug = (qs.get('debug') === '1');
+
+  if (!raw) {
+    document.body.innerHTML = '<h2>No search term provided</h2><p>Try: <code>?k=猫</code> 或 <code>#k=猫</code></p>';
     return;
   }
 
-  // 规范空白并编码
-  word = word.replace(/\s+/g, ' ').trim();
-  const url = 'https://www.mojidict.com/searchText/' + encodeURIComponent(word) + '?app=desktop&from=mn4';
+  // 严格编码整句
+  const encoded = encodeURIComponent(raw);
+  const url = 'https://www.mojidict.com/searchText/' + encoded + '?app=desktop&from=mn4';
+
+  if (debug) {
+    document.body.innerHTML = '<pre style="white-space:pre-wrap;padding:16px">' +
+      'raw: ' + raw + '\nencoded: ' + encoded + '\nredirect: ' + url +
+      '</pre>';
+    return;
+  }
+
   location.replace(url);
 })();
 </script>

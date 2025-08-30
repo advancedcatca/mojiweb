@@ -1,59 +1,193 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 <head>
-<meta charset="UTF-8">
-<title>Moji Redirect (safe full sentence)</title>
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<script>
-(function () {
-  // 取 query/hash 参数，兼容多种占位符
-  const qs = new URLSearchParams(location.search || "");
-  function getFromHash() {
-    const h = location.hash ? decodeURIComponent(location.hash.slice(1)) : "";
-    if (!h) return "";
-    const m = h.match(/^(?:k|kw|keyword|text|selection)=(.*)$/i);
-    return (m ? m[1] : h).trim();
-  }
-  let raw = (qs.get('k') || qs.get('keyword') || qs.get('text') || qs.get('selection') || "").trim();
-  if (!raw) raw = getFromHash();
-
-  // 支持 ?debug=1 或 #...&debug=1
-  const debug = (qs.get('debug') === '1') || /(?:^|[&#?])debug=1(?:&|$)/.test(location.hash);
-
-  // 清洗函数：去控制符/折叠空白/标准化
-  function sanitize(s) {
-    if (!s) return "";
-    // 去掉控制字符（包括零宽字符、回车等），保留常见标点
-    s = s.replace(/[\u0000-\u001F\u007F-\u009F\u200B-\u200D\uFEFF]/g, " ");
-    // 将各种空白（含换行/制表）折叠为单空格
-    s = s.replace(/\s+/g, " ");
-    // 去首尾空白
-    s = s.trim();
-    return s;
-  }
-
-  const cleaned = sanitize(raw);
-
-  if (debug) {
-    document.body.innerHTML =
-      '<pre style="white-space:pre-wrap;padding:16px">' +
-      'raw:\n' + raw + '\n\n' +
-      'cleaned:\n' + cleaned + '\n\n' +
-      'encoded:\n' + encodeURIComponent(cleaned) + '\n' +
-      '</pre>';
-    return;
-  }
-
-  if (!cleaned) {
-    document.body.innerHTML = '<h2>No search term provided</h2><p>Use ?k=猫 或 #k=猫 测试；或加 &debug=1 查看传参。</p>';
-    return;
-  }
-
-  // 严格编码整句，走 /searchText/ 更稳
-  const target = 'https://www.mojidict.com/searchText/' + encodeURIComponent(cleaned) + '?app=desktop&from=mn4';
-  location.replace(target);
-})();
-</script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Moji辞书中转</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .container {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 2rem;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            max-width: 400px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .logo {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+        }
+        
+        .title {
+            color: #333;
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            font-weight: 600;
+        }
+        
+        .keyword {
+            background: #f0f0f0;
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            margin: 1rem 0;
+            font-size: 1.1rem;
+            font-weight: 500;
+            color: #555;
+        }
+        
+        .loading {
+            color: #666;
+            font-size: 0.9rem;
+            margin-top: 1rem;
+        }
+        
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 1rem auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .error {
+            color: #e74c3c;
+            margin-top: 1rem;
+            padding: 1rem;
+            background: #ffeaea;
+            border-radius: 8px;
+            display: none;
+        }
+        
+        .manual-link {
+            display: none;
+            margin-top: 1rem;
+            padding: 0.8rem 1.5rem;
+            background: #667eea;
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            transition: background 0.3s;
+        }
+        
+        .manual-link:hover {
+            background: #5a67d8;
+        }
+    </style>
 </head>
-<body></body>
+<body>
+    <div class="container">
+        <div class="logo">📖</div>
+        <div class="title">Moji辞书查询中转</div>
+        <div class="keyword" id="keyword">获取关键词中...</div>
+        <div class="spinner" id="spinner"></div>
+        <div class="loading" id="loading">正在跳转到Moji辞书...</div>
+        <div class="error" id="error">
+            跳转失败，请检查关键词或网络连接
+        </div>
+        <a class="manual-link" id="manual-link" target="_blank">手动打开Moji辞书</a>
+    </div>
+
+    <script>
+        function getKeywordFromUrl() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const keyword = urlParams.get('q') || urlParams.get('keyword') || urlParams.get('search');
+            
+            // 如果URL参数中没有，尝试从hash中获取
+            if (!keyword && window.location.hash) {
+                const hash = decodeURIComponent(window.location.hash.substring(1));
+                return hash;
+            }
+            
+            // 如果URL参数中没有，尝试从路径中获取
+            if (!keyword) {
+                const pathParts = window.location.pathname.split('/');
+                const lastPart = pathParts[pathParts.length - 1];
+                if (lastPart && lastPart !== 'index.html') {
+                    return decodeURIComponent(lastPart);
+                }
+            }
+            
+            return keyword;
+        }
+        
+        function redirectToMoji(keyword) {
+            if (!keyword || keyword.trim() === '') {
+                showError('未找到搜索关键词');
+                return;
+            }
+            
+            const cleanKeyword = keyword.trim();
+            document.getElementById('keyword').textContent = cleanKeyword;
+            
+            // 构建Moji URL
+            const mojiUrl = `https://www.mojidict.com/searchText/${encodeURIComponent(cleanKeyword)}`;
+            
+            // 设置手动链接
+            const manualLink = document.getElementById('manual-link');
+            manualLink.href = mojiUrl;
+            manualLink.textContent = `查询「${cleanKeyword}」`;
+            
+            // 尝试自动跳转
+            setTimeout(() => {
+                try {
+                    window.location.href = mojiUrl;
+                } catch (e) {
+                    showError('自动跳转失败');
+                }
+            }, 1000);
+            
+            // 3秒后显示手动链接
+            setTimeout(() => {
+                document.getElementById('loading').textContent = '如果没有自动跳转，请点击下方链接：';
+                manualLink.style.display = 'inline-block';
+            }, 3000);
+        }
+        
+        function showError(message) {
+            document.getElementById('spinner').style.display = 'none';
+            document.getElementById('loading').style.display = 'none';
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            
+            const manualLink = document.getElementById('manual-link');
+            manualLink.href = 'https://www.mojidict.com/';
+            manualLink.textContent = '打开Moji辞书首页';
+            manualLink.style.display = 'inline-block';
+        }
+        
+        // 页面加载时执行
+        window.onload = function() {
+            const keyword = getKeywordFromUrl();
+            
+            if (keyword) {
+                redirectToMoji(keyword);
+            } else {
+                // 如果没有关键词，显示使用说明
+                document.getElementById('keyword').textContent = '请在URL中添加搜索关键词';
+                showError('使用方法：在URL后添加 ?q=关键词 或 #关键词');
+            }
+        };
+    </script>
+</body>
 </html>
